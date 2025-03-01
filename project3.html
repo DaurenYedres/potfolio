@@ -1,0 +1,193 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Project - Google Map Image Annotation</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+        .code-container {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        pre code {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .extended-explanations {
+            background-color: #f2f2f2;
+            border-left: 5px solid #ccc;
+            padding: 1em;
+            margin: 1.5em 0;
+        }
+    </style>
+</head>
+<body class="is-preload">
+
+    <!-- Wrapper -->
+    <div id="wrapper" class="fade-in">
+
+        <!-- Header -->
+        <header id="header">
+            <a href="index.html" class="logo">Portfolio</a>
+        </header>
+
+        <!-- Main -->
+        <div id="main">
+            <!-- Project Description -->
+            <article class="post featured">
+                <header class="major">
+                    <h2>Project: Google Map Image Annotation</h2>
+                    <p>Aim: To automatically annotate images generated from different city street views using various YOLO and SAM-based models.</p>
+                </header>
+                <a href="#" class="image main"><img src="images/google_map_image_annotation.jpg" alt="" /></a>
+                <p>Tasks Done: Created a Python notebook to run auto-annotation on a folder of unannotated street view images. The notebook relies on <strong>ultralytics</strong> libraries (YOLO, SAM) to detect objects and generate bounding box or segmentation masks, further allowing for bounding box scaling, customized visualization, and saving these annotations in a YOLO-compatible format.</p>
+                <p>Tools Used: Python, Jupyter Notebook, PyTorch, ultralytics (YOLO &amp; SAM), OpenCV, YOLO-based <code>auto_annotate</code> functionality.</p>
+                <p>Output: A new dataset of bounding box annotations for roadway images, including label text files and optionally visualized bounding box overlays.</p>
+
+                <!-- Installing Required Packages -->
+                <h3>Installing Required Packages</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+pip install ultralytics opencv-python torch
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> The above commands install the ultralytics package (including YOLO &amp; SAM) and other dependencies like OpenCV and torch (PyTorch).</p>
+
+                <h3>Importing Libraries and Setting Notebook Environment</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import torch
+import ultralytics
+import cv2
+import os
+
+from ultralytics.vit import SAM
+from ultralytics.yolo.data.annotator import auto_annotate
+
+# Print environment to ensure compatibility
+print(torch.__version__)
+print(ultralytics.__version__)
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong></p>
+                <ul>
+                    <li><strong>PyTorch (torch):</strong> Provides deep learning functionalities and GPU acceleration.</li>
+                    <li><strong>ultralytics:</strong> Used for YOLO object detection and SAM segmentation.</li>
+                    <li><strong>OpenCV (cv2):</strong> For image manipulation and visualization.</li>
+                </ul>
+                <p><strong>Reasoning:</strong> Checking versions ensures that the environment is set up correctly for further annotation tasks.</p>
+
+                <h3>Auto-Annotation Workflow</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+# Automatically annotate images in a directory
+auto_annotate(
+    data="google_map_street_view_images_dataset",   # Folder with unannotated images
+    det_model="yolov8x.pt",                        # Object detection model
+    sam_model="sam_l.pt"                           # Segmentation model
+)
+
+# Example bounding box scaling for YOLO label files
+labels_folder = "labels"
+for label_file in os.listdir(labels_folder):
+    if label_file.endswith(".txt"):
+        # Scale bounding boxes in each file
+        ...
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong></p>
+                <ul>
+                    <li><strong>auto_annotate:</strong> Uses YOLO detection and SAM segmentation to generate labels automatically. Yields bounding boxes or segmentation masks for each image.</li>
+                    <li><strong>Bounding Box Scaling:</strong> Allows modifying existing bounding boxes (e.g., inflate or deflate) for project-specific needs.</li>
+                </ul>
+
+                <h3>Visualizing the Updated Bounding Boxes</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+image_folder = "test image folder"
+output_folder = "visualized_output"
+os.makedirs(output_folder, exist_ok=True)
+
+for label_file in os.listdir(labels_folder):
+    image_filename = label_file.replace(".txt", ".jpg")
+    image_path = os.path.join(image_folder, image_filename)
+    # Load image, read bounding boxes, and use OpenCV to draw them onto the image
+    ...
+                    </code></pre>
+                </div>
+                <p><strong>Reasoning:</strong> By rendering bounding boxes onto the images and saving them, you can visualize annotations to validate if the auto-annotation process is performing as expected. This helps catch errors early and refine your annotation process.</p>
+
+                <h3>Summary</h3>
+                <p>This Jupyter notebook automates the annotation of Google Street View images generated in the previous project. It integrates YOLO detection models and SAM segmentation to produce bounding boxes or masks for objects in the images. Key steps include:</p>
+                <ul>
+                    <li>Setting up the Python environment and verifying versions.</li>
+                    <li>Using <strong>auto_annotate</strong> to generate annotation files.</li>
+                    <li>Optionally adjusting bounding boxes with scaling factors for domain-specific needs.</li>
+                    <li>Visualizing annotations to confirm accuracy.</li>
+                </ul>
+                <p><strong>Results:</strong> A fully or partially annotated dataset, suitable for building training sets for machine learning or computer vision tasks. The approach can be extended to other image domains or refined further to include segmentation masks and class-specific labeling.</p>
+
+                <div class="extended-explanations">
+                    <h3>Extended Code Explanations</h3>
+                    <p><strong>1. Checking Python and CUDA Versions:</strong><br />
+                    It’s often beneficial to confirm that you have the appropriate Python version, PyTorch version, and GPU capabilities before segmentation or detection. This is especially important for large-scale data operations.</p>
+                    <p><strong>2. Model Size and VRAM Usage:</strong><br />
+                    Larger YOLO or SAM models (e.g., “yolov8x”, “sam_l”) use more VRAM. Running many images through these models in a notebook can lead to GPU memory errors. Consider using smaller models (e.g., “yolov8n” or “sam_b”) or batch processing.</p>
+                    <p><strong>3. Post-Processing Annotations:</strong><br />
+                    After auto-annotation, the bounding boxes may need further adjustments (scaling, offsets, etc.). This post-processing step ensures the dataset is as accurate as possible for downstream training.</p>
+                    <p><strong>4. Visual Validation:</strong><br />
+                    Drawing the annotations onto images using <code>cv2.rectangle</code> and <code>cv2.putText</code> helps confirm that bounding boxes or segmentation masks align well with the objects of interest.</p>
+                    <p><strong>5. Handling Large Projects:</strong><br />
+                    If you have thousands of images, computational overhead becomes significant. Running everything sequentially in a Jupyter Notebook can be slow. Moving to a script-based approach or using cloud resources with more powerful GPUs can help.</p>
+                </div>
+
+            </article>
+        </div>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <section class="split contact">
+                <section class="alt">
+                    <h3>Address</h3>
+                    <p>Brunnenstraße<br />
+                    Berlin, Germany</p>
+                </section>
+                <section>
+                    <h3>Phone</h3>
+                    <p><a href="#">+49 15754762450</a></p>
+                </section>
+                <section>
+                    <h3>Email</h3>
+                    <p><a href="#">daurenyedres@gmail.com</a></p>
+                </section>
+                <section>
+                    <h3>Social</h3>
+                    <ul class="icons alt">
+                        <li><a href="https://www.linkedin.com/in/dauren-yedres-34a59a209/" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                        <li><a href="https://github.com/DaurenYedres" class="icon brands fa-github"><span class="label">GitHub</span></a></li>
+                    </ul>
+                </section>
+            </section>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.scrollex.min.js"></script>
+    <script src="assets/js/jquery.scrolly.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,299 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Project 2 - Dauren Yedres Portfolio</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+        .code-container {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        pre code {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+    </style>
+</head>
+<body class="is-preload">
+
+    <!-- Wrapper -->
+    <div id="wrapper" class="fade-in">
+
+        <!-- Header -->
+        <header id="header">
+            <a href="index.html" class="logo">Portfolio</a>
+        </header>
+
+        <!-- Main -->
+        <div id="main">
+            <!-- Project Description -->
+            <article class="post featured">
+                <header class="major">
+                    <h2>Project: Google Map Image Generator</h2>
+                    <p>Aim: To generate Google Street View images along specified routes using the Google Street View API.</p>
+                </header>
+                <a href="#" class="image main"><img src="images/google_map_image_generator.jpg" alt="" /></a>
+                <p>Tasks Done: Developed a Python script to capture Google Street View images at regular intervals along specified routes. The script calculates distances and bearings between points, generates URLs for the Street View API, and saves the images to a specified directory.</p>
+                <p>Tools Used: Python, Jupyter Notebook, Google Street View API, requests library, PIL (Python Imaging Library), osmnx, networkx.</p>
+                <p>Output: A collection of Google Street View images saved in a specified directory, captured at regular intervals along the specified routes.</p>
+
+                <!-- Example of a Python code block -->
+                <h3>Installing Required Packages</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+pip install requests osmnx networkx
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> The `requests` library is used to make HTTP requests to the Google Street View API. The `osmnx` and `networkx` libraries are used to download and manipulate street network data.</p>
+
+                <h3>Importing Libraries and Setting Up Variables</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import requests
+import os
+import math
+from PIL import Image
+from io import BytesIO
+import re
+import osmnx as ox
+import networkx as nx
+
+api_key = "YOUR_API_KEY"
+output_directory = "google_map_street_view_images"
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong></p>
+                <ul>
+                    <li><strong>`requests`:</strong> For making HTTP requests to the Google Street View API.</li>
+                    <li><strong>`os`:</strong> For creating directories and handling file paths.</li>
+                    <li><strong>`math`:</strong> For performing mathematical calculations, such as distance and bearing.</li>
+                    <li><strong>`PIL` (Python Imaging Library):</strong> For handling image data.</li>
+                    <li><strong>`BytesIO`:</strong> For handling binary data in memory.</li>
+                    <li><strong>`re`:</strong> For regular expression operations, used to match and handle filenames.</li>
+                    <li><strong>`osmnx`:</strong> For downloading and analyzing street network data.</li>
+                    <li><strong>`networkx`:</strong> For creating and manipulating complex networks of nodes and edges.</li>
+                </ul>
+                <p><strong>Variables:</strong></p>
+                <ul>
+                    <li><strong>`api_key`:</strong> The API key for accessing the Google Street View API.</li>
+                    <li><strong>`output_directory`:</strong> The directory where the captured images will be saved.</li>
+                </ul>
+
+                <h3>Generating Intersection Points</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+# Define the location and type of road network to download (e.g., 'drive' for drivable roads)
+city_name = "Astana, Kazakhstan"
+G = ox.graph_from_place(city_name, network_type='drive')
+
+# Initialize a list to hold pairs of intersections (crossroads) connected by one street
+intersection_pairs = []
+
+# Loop over edges in the NetworkX graph G
+for u, v, key, data in G.edges(keys=True, data=True):
+    # Get the (latitude, longitude) of the start and end nodes of each edge
+    intersection_1 = (G.nodes[u]['y'], G.nodes[u]['x'])  # (latitude, longitude) of first node
+    intersection_2 = (G.nodes[v]['y'], G.nodes[v]['x'])  # (latitude, longitude) of second node
+    
+    # Add the pair of intersections to the list
+    intersection_pairs.append((intersection_1, intersection_2))
+
+# Save intersection pairs to a text file
+output_file = "intersection_pairs.txt"
+with open(output_file, "w") as f:
+    for pair in intersection_pairs:
+        f.write(f"{pair[0][0]},{pair[0][1]},{pair[1][0]},{pair[1][1]}\n")
+
+print(f"Saved {len(intersection_pairs)} intersection pairs to {output_file}")
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong></p>
+                <ul>
+                    <li><strong>Define the location and type of road network:</strong> Specifies the city and type of road network to download using `osmnx`.</li>
+                    <li><strong>Initialize a list:</strong> Creates an empty list to hold pairs of intersections connected by one street.</li>
+                    <li><strong>Loop over edges:</strong> Iterates through the edges in the NetworkX graph to get the coordinates of the start and end nodes of each edge.</li>
+                    <li><strong>Save intersection pairs:</strong> Writes the pairs of intersections to a text file.</li>
+                </ul>
+                <p><strong>Reasoning:</strong> This logic is used to generate pairs of intersections (crossroads) connected by one street, which will be used to define the directions for capturing Google Street View images.</p>
+
+                <h3>Capturing Google Street View Images</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import random
+output_directory = "google_map_street_view_images_dataset"
+os.makedirs(output_directory, exist_ok=True)
+
+# Load intersection pairs from the text file
+input_file = "intersection_pairs.txt"
+loaded_pairs = []
+with open(input_file, "r") as f:
+    for line in f:
+        lat1, lon1, lat2, lon2 = map(float, line.strip().split(","))
+        loaded_pairs.append(((lat1, lon1), (lat2, lon2)))
+
+# Randomly select a subset of intersection pairs for testing
+test_pairs = random.sample(loaded_pairs, len(loaded_pairs) // 10)
+
+# Function to calculate distance between two coordinates
+def haversine(lat1, lon1, lat2, lon2):
+    R = 6371000  # Radius of Earth in meters
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+
+    a = math.sin(delta_phi / 2) ** 2 + math.cos(phi1) * math.cos(phi2) * math.sin(delta_lambda / 2) ** 2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+    return R * c
+
+# Function to calculate the bearing
+def calculate_bearing(lat1, lon1, lat2, lon2):
+    delta_lon = math.radians(lon2 - lon1)
+    lat1, lat2 = math.radians(lat1), math.radians(lat2)
+    
+    x = math.sin(delta_lon) * math.cos(lat2)
+    y = math.cos(lat1) * math.sin(lat2) - math.sin(lat1) * math.cos(lat2) * math.cos(delta_lon)
+    bearing = math.atan2(x, y)
+    return (math.degrees(bearing) + 360) % 360
+
+# Calculate destination point
+def destination_point(lat, lon, bearing, distance):
+    R = 6371000  # Radius of Earth in meters
+    bearing = math.radians(bearing)
+
+    lat1 = math.radians(lat)
+    lon1 = math.radians(lon)
+
+    lat2 = math.asin(math.sin(lat1) * math.cos(distance / R) +
+                     math.cos(lat1) * math.sin(distance / R) * math.cos(bearing))
+    lon2 = lon1 + math.atan2(math.sin(bearing) * math.sin(distance / R) * math.cos(lat1),
+                             math.cos(distance / R) - math.sin(lat1) * math.sin(lat2))
+
+    return math.degrees(lat2), math.degrees(lon2)
+
+# Find the highest numbered file in the output directory
+existing_files = [f for f in os.listdir(output_directory) if re.match(r'\d{5}\.jpg', f)]
+if existing_files:
+    last_index = max(int(re.match(r'(\d{5})', f).group()) for f in existing_files)
+else:
+    last_index = -1
+
+# Loop through each route in the test_pairs
+for route_index, (start_coords, end_coords) in enumerate(test_pairs):
+    start_lat, start_lon = start_coords
+    end_lat, end_lon = end_coords
+
+    # Calculate total distance and bearing for each route
+    total_distance = haversine(start_lat, start_lon, end_lat, end_lon)
+    bearing = calculate_bearing(start_lat, start_lon, end_lat, end_lon)
+
+    # Set num_images_per_route based on the distance
+    if total_distance < 50:
+        num_images_per_route = 2
+    elif 50 <= total_distance < 100:
+        num_images_per_route = 5
+    else:
+        num_images_per_route = 7
+
+    # Calculate step distance
+    step_distance = total_distance / num_images_per_route
+
+    # Initialize start point
+    lat, lon = start_lat, start_lon
+
+    # Capture images along the route
+    for i in range(num_images_per_route):
+        lat, lon = destination_point(lat, lon, bearing, step_distance)
+        # Create Street View URL with dynamic heading and pitch
+        url = f"https://maps.googleapis.com/maps/api/streetview?size=1392x512&location={lat},{lon}&heading={bearing}&fov=60&pitch=10&key={api_key}"
+
+        response = requests.get(url)
+        filename = os.path.join(output_directory, f"{last_index + 1:05}.jpg")
+        # Check if the image content size is greater than 8 KB (indicating it’s not empty)
+        if response.status_code == 200 and len(response.content) > 8192:  # 8 KB = 8192 bytes
+            image = Image.open(BytesIO(response.content))
+            with open(filename, "wb") as file:
+                file.write(response.content)
+            print(f"Image saved: {filename} at location ({lat}, {lon}) with heading {bearing}")
+            last_index += 1
+        else:
+            print(f"Skipping empty image at location ({lat}, {lon})")
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong></p>
+                <ul>
+                    <li><strong>Load intersection pairs:</strong> Reads the pairs of intersections from the text file.</li>
+                    <li><strong>Randomly select a subset:</strong> Selects a random subset of intersection pairs for testing.</li>
+                    <li><strong>Calculate distance and bearing:</strong> Uses the previously defined functions to calculate the total distance and bearing for each route.</li>
+                    <li><strong>Set number of images:</strong> Determines the number of images to capture based on the total distance of the route.</li>
+                    <li><strong>Capture images:</strong> Iterates through the route, calculating intermediate points and capturing images using the Google Street View API.</li>
+                </ul>
+                <p><strong>Reasoning:</strong> This logic is designed to capture a specified number of images evenly spaced along a route, using intersection points to define the directions for capturing Google Street View images. The randomization helps to cover different parts of the chosen city, and the number of photos generated can be customized based on the distance of the route.</p>
+
+                <h3>Summary</h3>
+                <p>The notebook is designed to automate the process of capturing Google Street View images along specified routes. The code logic includes:</p>
+                <ul>
+                    <li>Installing necessary packages.</li>
+                    <li>Importing libraries and setting up variables.</li>
+                    <li>Generating intersection points.</li>
+                    <li>Capturing images at regular intervals along a route.</li>
+                    <li>Handling multiple routes and ensuring unique filenames for saved images.</li>
+                </ul>
+                <p>The chosen logic ensures that images are captured accurately and efficiently, with proper handling of distances, bearings, and file management. The use of the Google Street View API allows for capturing panoramic images from designated locations along streets, and the bearing calculations ensure that the camera view is aligned with the direction of the road.</p>
+                <p><strong>Results:</strong></p>
+                <ul>
+                    <li>Chosen cities included Astana and Almaty in Kazakhstan.</li>
+                    <li>Number of intersection pairs generated in Astana: 20,269 intersection pairs, sample size for image generation: 1/10 of intersection pairs, the resulted image dataset size: 8,802.</li>
+                    <li>Number of intersection pairs generated in Almaty: 48,736 intersection pairs, sample size for image generation: 1/20 of intersection pairs, the resulted image dataset size: 7,856.</li>
+                </ul>
+                <p>The dataset size for the chosen cities can be increased by increasing the sample size and adjusting the settings of `num_images_per_route` based on the distance. The proposed method can be used for any city in the world if their information is present in the `osmnx` library. The proposed method can be a part of the solution for creating annotated road image datasets for training ML models.</p>
+            </article>
+        </div>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <section class="split contact">
+                <section class="alt">
+                    <h3>Address</h3>
+                    <p>Brunnenstraße<br />
+                        Berlin, Germany</p>
+                </section>
+                <section>
+                    <h3>Phone</h3>
+                    <p><a href="#">+49 15754762450</a></p>
+                </section>
+                <section>
+                    <h3>Email</h3>
+                    <p><a href="#">daurenyedres@gmail.com</a></p>
+                </section>
+                <section>
+                    <h3>Social</h3>
+                    <ul class="icons alt">
+                        <li><a href="https://www.linkedin.com/in/dauren-yedres-34a59a209/" class="icon brands fa-linkedin"><span class="label">linkedin</span></a></li>
+                        <li><a href="https://github.com/DaurenYedres" class="icon brands fa-github"><span class="label">GitHub</span></a></li>
+                    </ul>
+                </section>
+            </section>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.scrollex.min.js"></script>
+    <script src="assets/js/jquery.scrolly.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+
+</body>
+</html>

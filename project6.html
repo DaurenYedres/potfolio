@@ -1,0 +1,669 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Project - Transport Density and POI Analysis</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+        .code-container {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        pre code {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .map-container {
+            width: 100%;
+            height: 500px;
+            margin: 20px auto;
+        }
+        .image-container {
+            text-align: center;
+            margin: 20px auto;
+        }
+        .image-container img {
+            max-width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body class="is-preload">
+
+    <!-- Wrapper -->
+    <div id="wrapper" class="fade-in">
+
+        <!-- Header -->
+        <header id="header">
+            <a href="index.html" class="logo">Portfolio</a>
+        </header>
+
+        <!-- Main -->
+        <div id="main">
+            <!-- Project Description -->
+            <article class="post featured">
+                <header class="major">
+                    <h2>Project: Transport Density and POI Analysis</h2>
+                    <p>Aim: To analyze transport density and Points of Interest (POI) in Berlin, Germany, using various Python scripts and visualize the results on interactive maps.</p>
+                </header>
+                
+                <p>Tasks Done: Developed Python scripts to analyze transport density and POI data in Berlin. The scripts generate interactive maps and export analysis results to CSV files.</p>
+                <p>Tools Used: Python, Folium, Pandas, NumPy, Matplotlib, Seaborn, Geopandas.</p>
+                <p>Output: Interactive maps of transport density and POI analysis, and CSV files containing analysis results.</p>
+
+                <!-- Installing Required Packages -->
+                <h3>Installing Required Packages</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+pip install folium pandas numpy matplotlib seaborn geopandas shapely
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> The above commands install the necessary Python packages for creating interactive maps, handling data, performing numerical operations, and visualizing data.</p>
+
+                <h3>Heatmap Script</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import folium
+import numpy as np
+from collections import defaultdict
+import math
+import pandas as pd
+
+def export_density_data(grid_cells, filename='density_data.csv'):
+    """Export density data to CSV"""
+    data = []
+    for cell in grid_cells:
+        data.append({
+            'latitude': cell['center'][0],
+            'longitude': cell['center'][1],
+            'density': cell['density'],
+            'num_stops': len(cell['stops']),
+            'stops_names': ';'.join([stop['name'] for stop in cell['stops']])
+        })
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False)
+    return df
+
+def create_grid(bounds, grid_size_meters=50):
+    """Create regular square grid"""
+    lat_offset = grid_size_meters / 111320  # meters to degrees conversion
+    lon_offset = grid_size_meters / (111320 * np.cos(np.radians(52.52)))  # Berlin latitude
+    
+    lat_steps = np.arange(bounds['south'], bounds['north'], lat_offset)
+    lon_steps = np.arange(bounds['west'], bounds['east'], lon_offset)
+    
+    grid_cells = []
+    for lat in lat_steps:
+        for lon in lon_steps:
+            cell = {
+                'bounds': [
+                    [lat, lon],  # SW
+                    [lat + lat_offset, lon],  # NW
+                    [lat + lat_offset, lon + lon_offset],  # NE
+                    [lat, lon + lon_offset],  # SE
+                    [lat, lon]  # SW again to close polygon
+                ],
+                'center': [lat + lat_offset/2, lon + lon_offset/2],
+                'stops': []
+            }
+            grid_cells.append(cell)
+    return grid_cells
+
+def assign_stops_to_cells(grid_cells, stops):
+    """Assign stops to their corresponding grid cells"""
+    for stop in stops:
+        lat, lon = stop['coordinates']
+        for cell in grid_cells:
+            bounds = cell['bounds']
+            if (bounds[0][0] <= lat <= bounds[1][0] and
+                bounds[0][1] <= lon <= bounds[2][1]):
+                cell['stops'].append(stop)
+                break
+    return grid_cells
+
+def calculate_density_score(cell, grid_cells, grid_size_meters):
+    """Calculate density score for a cell based on NxN grid area"""
+    score = 0
+    cell_center = cell['center']
+    grid_radius = 3  # Change this to adjust grid area (3 means 7x7 grid)
+    weights = {0: 1.0, 1: 0.7, 2: 0.5, 3: 0.25}  # Customize weights for different distances
+    total_squares = (2 * grid_radius + 1) ** 2  # Calculate total squares in the grid
+    
+    for other_cell in grid_cells:
+        # Calculate Manhattan distance in grid units
+        lat_diff = abs(cell_center[0] - other_cell['center'][0]) / (grid_size_meters/111320)
+        lon_diff = abs(cell_center[1] - other_cell['center'][1]) / (grid_size_meters/(111320 * np.cos(np.radians(52.52))))
+        grid_distance = max(int(lat_diff), int(lon_diff))
+        
+        if grid_distance <= grid_radius:  # Within NxN grid
+            stop_count = len(other_cell['stops'])
+            weight = weights.get(grid_distance, 0.0)  # Get weight or 0 if distance too far
+            score += stop_count * weight
+    
+    return score / total_squares  # Normalize by total squares in the grid
+
+def get_color(density, max_density):
+    """Get color based on density value"""
+    if density == 0:
+        return '#FFFFFF'
+    
+    colors = [
+        (0.0, '#FFFFFF'),    # White (no density)
+        (0.1, '#FFF7BC'),    # Very light yellow
+        (0.2, '#FED976'),    # Light yellow
+        (0.3, '#FEB24C'),    # Yellow orange
+        (0.4, '#FD8D3C'),    # Light orange
+        (0.5, '#FC4E2A'),    # Orange
+        (0.7, '#E31A1C'),    # Red
+        (0.8, '#BD0026'),    # Dark red
+        (1.0, '#800026')     # Very dark red
+    ]
+    
+    normalized = density / max_density
+    
+    # Find appropriate color interval
+    for i in range(len(colors)-1):
+        if colors[i][0] <= normalized <= colors[i+1][0]:
+            ratio = (normalized - colors[i][0]) / (colors[i+1][0] - colors[i][0])
+            color1 = [int(colors[i][1][j:j+2], 16) for j in (1,3,5)]
+            color2 = [int(colors[i+1][1][j:j+2], 16) for j in (1,3,5)]
+            rgb = [int(c1 + (c2-c1)*ratio) for c1, c2 in zip(color1, color2)]
+            return f'#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
+    
+    return colors[-1][1]
+
+def create_heatmap(stops, grid_size_meters=100):
+    """Create density heatmap"""
+    bounds = {
+        'north': 52.60,  # Changed from 52.54
+        'south': 52.40,  # Changed from 52.50
+        'east': 13.65,   # Changed from 13.45
+        'west': 13.15    # Changed from 13.35
+    }
+    
+    # Create and populate grid
+    grid_cells = create_grid(bounds, grid_size_meters)
+    grid_cells = assign_stops_to_cells(grid_cells, stops)
+    
+    # Calculate density scores
+    for cell in grid_cells:
+        cell['density'] = calculate_density_score(cell, grid_cells, grid_size_meters)
+    
+    # Create map
+    berlin_map = folium.Map(
+        location=[52.52, 13.40],
+        zoom_start=11,
+        tiles='openstreetmap',
+    )
+    
+    # Add cells to map
+    max_density = max(cell['density'] for cell in grid_cells)
+    for cell in grid_cells:
+        color = get_color(cell['density'], max_density)
+        folium.Polygon(
+            locations=cell['bounds'],
+            color='black',
+            weight=1,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.7,
+            popup=f"Stops: {len(cell['stops'])}<br>Density: {cell['density']:.2f}"
+        ).add_to(berlin_map)
+    
+    # Add legend
+    legend_html = '''
+    &lt;div style="position: fixed; bottom: 50px; right: 50px; width: 180px;
+            background-color: white; border-radius: 10px; z-index: 9999; padding: 10px"&gt;
+        &lt;h4&gt;Transport Density&lt;/h4&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #800026; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Extremely High&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #BD0026; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Very High&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #E31A1C; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;High&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FC4E2A; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Medium High&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FD8D3C; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Medium&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FEB24C; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Medium Low&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FED976; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Low&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FFF7BC; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;Very Low&lt;/span&gt;
+        &lt;/div&gt;
+        &lt;div style="display: flex; align-items: center;"&gt;
+            &lt;div style="width: 20px; height: 20px; background-color: #FFFFFF; margin-right: 5px;"&gt;&lt;/div&gt;
+            &lt;span&gt;None&lt;/span&gt;
+        &lt;/div&gt;
+    &lt;/div&gt;
+    '''
+    berlin_map.get_root().html.add_child(folium.Element(legend_html))
+    
+    return berlin_map, grid_cells
+
+if __name__ == "__main__":
+    # Load stops
+    stops = []
+    current_stop = {}
+    
+    with open("transport_stops.txt", 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("Stop"):
+                if current_stop:
+                    stops.append(current_stop.copy())
+                current_stop = {"name": line.split(": ")[1]}
+            elif line.startswith("Location:"):
+                coords = line.split(": ")[1].strip("()").split(",")
+                current_stop["coordinates"] = (float(coords[0]), float(coords[1]))
+    
+    # Create multiple maps with different grid sizes
+    grid_sizes = [200]  # in meters
+    
+    for size in grid_sizes:
+        density_map, grid_cells = create_heatmap(stops, grid_size_meters=size)
+        density_map.save(f"transport_density_grid_{size}m.html")
+        
+        # Export density data
+        export_density_data(grid_cells, f'density_data_{size}m.csv')
+        print(f"Created map and exported data with {size}x{size}m grid cells")
+                    </code></pre>
+                </div>
+                    <p><strong>Explanation:</strong> This script creates a heatmap visualization of public transport density in Berlin by implementing several key algorithms. 
+                        The code generates a grid system over the Berlin area and calculates density scores based on the number and proximity of transport stops. 
+                        Here's a deeper look at the components:</p> 
+                    <h4>Aim:</h4> <p>The primary goal of this script is to visualize the spatial distribution of public transport accessibility across Berlin. 
+                            By creating a visual heatmap representation, the script helps identify areas with high transport coverage versus underserved regions, providing valuable insights for urban planning, real estate development, and public transit optimization.</p> 
+                    <h4>Key Components:</h4> <ul> <li><strong>Grid System Creation:</strong> The city is divided into a grid of cells with customizable size (default 100-200m), converting geographic coordinates to a workable grid.</li> <li>
+                            <strong>Density Calculation:</strong> Uses a weighted algorithm that considers not just the stops within each cell but also neighboring cells, creating a more realistic representation of transport accessibility.</li> 
+                            <li><strong>Color Mapping:</strong> Implements a sophisticated color gradient from white (no transport) to dark red (extremely high density) using RGB interpolation for smooth transitions.</li> 
+                            <li><strong>Interactive Visualization:</strong> Leverages Folium to create an interactive web map with tooltips showing detailed density information for each cell.</li> 
+                            <li><strong>Data Export:</strong> Saves the processed density data to CSV format for further analysis in other tools.</li> </ul> 
+                    <h4>Results:</h4> <p>The output includes:</p> <ul> <li>An interactive HTML map with color-coded grid cells showing transport density patterns across Berlin.</li> 
+                            <li>A detailed legend explaining the density categories from "None" to "Extremely High."</li> 
+                            <li>A comprehensive CSV dataset containing coordinates, density scores, stop counts, and stop names for each grid cell.</li> </ul> 
+                            <p>The visualization clearly reveals Berlin's transport network structure, highlighting the dense central areas, major corridors along train and subway lines, and less-served peripheral regions. 
+                            This provides actionable insights for transportation planners and urban developers to identify areas requiring improved public transit services.</p>
+                <div class="map-container">
+                    <!-- Embed the interactive map here -->
+                    <iframe src="files from diff projescts/transport_density_grid_200m.html" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+                <div class="image-container">
+                    <img src="images/density_distribution_200m.png" alt="Density Distribution">
+                </div>
+
+                <h3>POI Data Script</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import osmnx as ox
+import pandas as pd
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
+
+def get_amenities(area, amenity_types):
+    """
+    Fetch amenities from OpenStreetMap
+    area: name of the city/region (e.g., 'Berlin, Germany')
+    amenity_types: list of amenity types to fetch
+    """
+    # Create empty dataframe for results
+    all_pois = pd.DataFrame()
+    
+    for amenity in amenity_types:
+        try:
+            # Fetch POIs from OSM
+            pois = ox.features_from_place(
+                area,
+                tags={'amenity': amenity}
+            )
+            
+            if not pois.empty:
+                # Extract coordinates based on geometry type
+                pois['amenity_type'] = amenity
+                
+                # Handle different geometry types
+                def get_coords(geom):
+                    if isinstance(geom, Point):
+                        return (geom.y, geom.x)
+                    elif isinstance(geom, Polygon):
+                        centroid = geom.centroid
+                        return (centroid.y, centroid.x)
+                    else:
+                        try:
+                            centroid = geom.centroid
+                            return (centroid.y, centroid.x)
+                        except:
+                            return (None, None)
+                
+                # Apply coordinate extraction
+                coords = pois.geometry.apply(get_coords)
+                pois['latitude'] = coords.apply(lambda x: x[0])
+                pois['longitude'] = coords.apply(lambda x: x[1])
+                
+                # Remove rows with invalid coordinates
+                pois = pois.dropna(subset=['latitude', 'longitude'])
+                
+                # Select relevant columns
+                pois_df = pois[['amenity_type', 'name', 'latitude', 'longitude']].copy()
+                all_pois = pd.concat([all_pois, pois_df])
+                
+                print(f"Found {len(pois_df)} {amenity} locations")
+                
+        except Exception as e:
+            print(f"Error fetching {amenity}: {str(e)}")
+    
+    return all_pois
+
+# ... rest of the code remains the same ...
+
+def save_poi_data():
+    """Fetch and save POI data for Berlin"""
+    # Define amenity types to fetch
+    amenities = [
+        'school',
+        'hospital',
+        'supermarket',
+        'shopping',
+        'university',
+        'library',
+        'pharmacy',
+        'cinema',
+        'theatre',
+        'police'
+    ]
+    
+    # Fetch data
+    berlin_pois = get_amenities('Berlin, Germany', amenities)
+    
+    # Save to CSV
+    berlin_pois.to_csv('berlin_pois.csv', index=False)
+    print(f"Saved {len(berlin_pois)} POIs to berlin_pois.csv")
+    
+    return berlin_pois
+
+if __name__ == "__main__":
+    save_poi_data()
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This script leverages the OSMnx library to extract Points of Interest (POI) data from OpenStreetMap for Berlin. 
+                The code systematically queries various amenity types and processes their geographic data to create a comprehensive dataset of important locations across the city.</p> 
+                <h4>Aim:</h4> <p>The primary objective of this script is to collect and organize location-based data about essential urban amenities in Berlin. By creating a standardized dataset 
+                of schools, hospitals, shopping centers, and other key facilities, the script enables spatial analysis of urban resources distribution and their relationship with public 
+                transportation accessibility. This provides a foundation for understanding how well different types of amenities are served by the city's transport network.</p> 
+                <h4>Key Components:</h4> <ul> <li><strong>Amenity Data Extraction:</strong> The script uses OSMnx to systematically fetch geo-referenced data for 10 different amenity 
+                types across Berlin, handling both point and polygon geometries.</li> <li><strong>Geometry Processing:</strong> Advanced handling of different geometry types (points, polygons, etc.) 
+                ensures consistent coordinate extraction regardless of how the amenity is represented in OpenStreetMap.</li> <li><strong>Error Resilience:</strong> Implements error handling to 
+                ensure that issues with specific amenity types don't interrupt the overall data collection process.</li> <li><strong>Data Standardization:</strong> Processes raw OpenStreetMap 
+                data into a clean, consistent format with standardized fields across all amenity types.</li> <li><strong>Export Functionality:</strong> Saves the collected data to a CSV file that 
+                can be easily used for further analysis or visualization.</li> </ul> <h4>Results:</h4> <p>The output includes:</p> <ul> <li>A comprehensive CSV dataset containing detailed information 
+                about various amenities in Berlin, including their names, types, and precise geographic coordinates.</li> <li>Console output summarizing the number of amenities found for each category, 
+                providing immediate feedback on data coverage.</li> <li>A standardized dataset that can be easily integrated with transport density data for correlation analysis.</li> </ul> 
+                <p>The resulting POI dataset serves as a crucial input for understanding urban accessibility patterns. When combined with transport density information, it reveals insights 
+                about which urban amenities have good public transport access and which areas might benefit from improved services. This information is valuable for urban planners, real 
+                estate developers, and city officials seeking to optimize resource allocation and improve quality of life for residents.</p>
+                <div class="image-container">
+                    <img src="images\density_poi_analysis_200m.png" alt="POI Data">
+                </div>
+
+                <h3>Density Analysis Script</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+from pathlib import Path
+import geopandas as gpd
+from shapely.geometry import Point
+def load_density_data(filename):
+    """Load density data from CSV"""
+    return pd.read_csv(filename)
+
+def create_distribution_plot(df, grid_size):
+    """Create distribution plot for density values"""
+    plt.figure(figsize=(12, 6))
+    
+    # Density distribution
+    plt.subplot(1, 2, 1)
+    sns.histplot(data=df, x='density', bins=50)
+    plt.title(f'Density Distribution ({grid_size}m grid)')
+    plt.xlabel('Density Score')
+    plt.ylabel('Count')
+    
+    # Add mean and median lines
+    plt.axvline(df['density'].mean(), color='r', linestyle='--', label='Mean')
+    plt.axvline(df['density'].median(), color='g', linestyle='--', label='Median')
+    plt.legend()
+    
+    # Box plot
+    plt.subplot(1, 2, 2)
+    sns.boxplot(y=df['density'])
+    plt.title('Density Box Plot')
+    
+    plt.tight_layout()
+    plt.savefig(f'density_distribution_{grid_size}m.png')
+    plt.close()
+
+def analyze_density_stats(df):
+    """Calculate and print density statistics"""
+    stats = {
+        'Mean Density': df['density'].mean(),
+        'Median Density': df['density'].median(),
+        'Max Density': df['density'].max(),
+        'Min Density': df['density'].min(),
+        'Std Dev': df['density'].std(),
+        'Number of Cells': len(df),
+        'Cells with Stops': (df['num_stops'] > 0).sum(),
+        'Total Stops': df['num_stops'].sum()
+    }
+    
+    return pd.Series(stats)
+
+
+def analyze_with_pois(density_df, poi_df, grid_size):
+    """Analyze transport density with POIs"""
+    # Convert POIs to GeoDataFrame
+    poi_gdf = gpd.GeoDataFrame(
+        poi_df, 
+        geometry=[Point(xy) for xy in zip(poi_df.longitude, poi_df.latitude)]
+    )
+    
+    # Convert density cells to GeoDataFrame
+    density_gdf = gpd.GeoDataFrame(
+        density_df,
+        geometry=[Point(xy) for xy in zip(density_df.longitude, density_df.latitude)]
+    )
+    
+    # Create combined plot
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+    
+    # Plot 1: Density heatmap with POIs
+    density_gdf.plot(ax=ax1, column='density', cmap='YlOrRd', 
+                    legend=True, alpha=0.6)
+    poi_gdf.plot(ax=ax1, color='blue', markersize=20, alpha=0.4)
+    ax1.set_title(f'Transport Density and POIs ({grid_size}m grid)')
+    
+    # Plot 2: POI type distribution in high-density areas
+    high_density = density_gdf[density_gdf.density > density_df.density.mean()]
+    poi_counts = poi_gdf.amenity_type.value_counts()
+    poi_counts.plot(kind='bar', ax=ax2)
+    ax2.set_title('POI Distribution')
+    ax2.tick_params(axis='x', rotation=45)
+    
+    plt.tight_layout()
+    plt.savefig(f'density_poi_analysis_{grid_size}m.png')
+    plt.close()
+
+def analyze_stop_poi_correlation(density_df, poi_df, grid_size):
+    """Analyze correlation between transport stops and POI locations"""
+    # Create GeoDataFrames
+    poi_gdf = gpd.GeoDataFrame(
+        poi_df, 
+        geometry=[Point(xy) for xy in zip(poi_df.longitude, poi_df.latitude)]
+    )
+    
+    density_gdf = gpd.GeoDataFrame(
+        density_df,
+        geometry=[Point(xy) for xy in zip(density_df.longitude, density_df.latitude)]
+    )
+    
+    # Create buffer around each cell
+    buffer_distance = grid_size / 111000  # Convert meters to degrees (approximate)
+    density_gdf['geometry'] = density_gdf.geometry.buffer(buffer_distance)
+    
+    # Count POIs by type for each cell
+    poi_types = poi_df['amenity_type'].unique()
+    for poi_type in poi_types:
+        type_pois = poi_gdf[poi_gdf['amenity_type'] == poi_type]
+        counts = []
+        for cell in density_gdf.geometry:
+            count = sum(type_pois.within(cell))
+            counts.append(count)
+        density_gdf[f'poi_{poi_type}'] = counts
+    
+    # Create correlation plots
+    plt.figure(figsize=(15, 10))
+    
+    # Heatmap of correlations
+    plt.subplot(2, 1, 1)
+    correlation_matrix = density_gdf[['density'] + [f'poi_{pt}' for pt in poi_types]].corr()
+    sns.heatmap(correlation_matrix, annot=True, cmap='coolwarm', center=0)
+    plt.title('Correlation between Transport Density and POI Types')
+    
+    # Scatter plots for each POI type
+    plt.subplot(2, 1, 2)
+    for poi_type in poi_types:
+        plt.scatter(
+            density_gdf['density'],
+            density_gdf[f'poi_{poi_type}'],
+            alpha=0.5,
+            label=poi_type
+        )
+    plt.xlabel('Transport Density')
+    plt.ylabel('Number of POIs')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.title('Transport Density vs POI Count by Type')
+    
+    plt.tight_layout()
+    plt.savefig(f'density_poi_correlation_{grid_size}m.png', bbox_inches='tight')
+    plt.close()
+    
+    # Print correlation statistics
+    print("\nCorrelation with Transport Density:")
+    for poi_type in poi_types:
+        corr = density_gdf['density'].corr(density_gdf[f'poi_{poi_type}'])
+        print(f"{poi_type}: {corr:.3f}")
+
+    return correlation_matrix
+
+if __name__ == "__main__":
+    # Load POI data if available
+    try:
+        poi_df = pd.read_csv('berlin_pois.csv')
+        has_pois = True
+    except FileNotFoundError:
+        has_pois = False
+        print("POI data not found. Run poi_data.py first for combined analysis.")
+    
+    # Process density data files
+    for file in Path('.').glob('density_data_*.csv'):
+        grid_size = int(file.stem.split('_')[-1][:-1])
+        df = load_density_data(file)
+        
+        # Create basic plots
+        create_distribution_plot(df, grid_size)
+        
+        # Calculate statistics
+        stats = analyze_density_stats(df)
+        print(f"\nStatistics for {grid_size}m grid:")
+        print(stats)
+        
+        # Additional POI analysis if available
+        if has_pois:
+            analyze_with_pois(df, poi_df, grid_size)
+            correlation_matrix = analyze_stop_poi_correlation(df, poi_df, grid_size)
+        
+            # Export correlation matrix
+            correlation_matrix.to_csv(f'correlation_matrix_{grid_size}m.csv')
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This script analyzes transport density data and POI data in Berlin. It generates various plots and statistics to understand the distribution and correlation between transport density and POIs.</p>
+                <div class="image-container">
+                    <img src="images\density_poi_correlation_200m.png" alt="Density Analysis">
+                </div>
+
+                <h3>Summary</h3>
+                <p>This project involves analyzing transport density and Points of Interest (POI) in Berlin using various Python scripts. The scripts generate interactive maps and export analysis results to CSV files. Key steps include:</p>
+                <ul>
+                    <li>Creating a heatmap of transport density using public transport stops data.</li>
+                    <li>Fetching and saving POI data for Berlin.</li>
+                    <li>Analyzing the correlation between transport density and POIs.</li>
+                    <li>Generating interactive maps and exporting analysis results to CSV files.</li>
+                </ul>
+                <p><strong>Results:</strong> Interactive maps of transport density and POI analysis, and CSV files containing analysis results.</p>
+            </article>
+        </div>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <section class="split contact">
+                <section class="alt">
+                    <h3>Address</h3>
+                    <p>Brunnenstraße<br />
+                    Berlin, Germany</p>
+                </section>
+                <section>
+                    <h3>Phone</h3>
+                    <p><a href="#">+49 15754762450</a></p>
+                </section>
+                <section>
+                    <h3>Email</h3>
+                    <p><a href="#">daurenyedres@gmail.com</a></p>
+                </section>
+                <section>
+                    <h3>Social</h3>
+                    <ul class="icons alt">
+                        <li><a href="https://www.linkedin.com/in/dauren-yedres-34a59a209/" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                        <li><a href="https://github.com/DaurenYedres" class="icon brands fa-github"><span class="label">GitHub</span></a></li>
+                    </ul>
+                </section>
+            </section>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.scrollex.min.js"></script>
+    <script src="assets/js/jquery.scrolly.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+    <script src="assets/js/code-folding.js"></script>
+</body>
+</html>

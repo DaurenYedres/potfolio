@@ -1,0 +1,344 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Project - Transport Density Heatmap</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+        .code-container {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        pre code {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .map-container {
+            width: 100%;
+            height: 500px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body class="is-preload">
+
+    <!-- Wrapper -->
+    <div id="wrapper" class="fade-in">
+
+        <!-- Header -->
+        <header id="header">
+            <a href="index.html" class="logo">Portfolio</a>
+        </header>
+
+        <!-- Main -->
+        <div id="main">
+            <!-- Project Description -->
+            <article class="post featured">
+                <header class="major">
+                    <h2>Project: Transport Density Heatmap</h2>
+                    <p>Aim: To create a heatmap of transport density in Berlin, Germany, using public transport stops data and visualize it on an interactive map.</p>
+                </header>
+                <div class="map-container">
+                    <!-- Embed the interactive map here -->
+                    <iframe src="files from diff projescts/transport_density_grid_200m.html" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+                <p>Tasks Done: Developed a Python script to create a heatmap of transport density in Berlin using public transport stops data. The script generates an interactive map using Folium and exports the density data to a CSV file.</p>
+                <p>Tools Used: Python, Folium, Pandas, NumPy.</p>
+                <p>Output: An interactive heatmap of transport density in Berlin and a CSV file containing density data.</p>
+
+                <!-- Installing Required Packages -->
+                <h3>Installing Required Packages</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+pip install folium pandas numpy
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> The above commands install the necessary Python packages for creating interactive maps, handling data, and performing numerical operations.</p>
+
+                <h3>Creating the Heatmap</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import folium
+import numpy as np
+from collections import defaultdict
+import pandas as pd
+
+def export_density_data(grid_cells, filename='density_data.csv'):
+    """Export density data to CSV"""
+    data = []
+    for cell in grid_cells:
+        data.append({
+            'latitude': cell['center'][0],
+            'longitude': cell['center'][1],
+            'density': cell['density'],
+            'num_stops': len(cell['stops']),
+            'stops_names': ';'.join([stop['name'] for stop in cell['stops']])
+        })
+    
+    df = pd.DataFrame(data)
+    df.to_csv(filename, index=False)
+    return df
+
+def create_grid(bounds, grid_size_meters=50):
+    """Create regular square grid"""
+    lat_offset = grid_size_meters / 111320  # meters to degrees conversion
+    lon_offset = grid_size_meters / (111320 * np.cos(np.radians(52.52)))  # Berlin latitude
+    
+    lat_steps = np.arange(bounds['south'], bounds['north'], lat_offset)
+    lon_steps = np.arange(bounds['west'], bounds['east'], lon_offset)
+    
+    grid_cells = []
+    for lat in lat_steps:
+        for lon in lon_steps:
+            cell = {
+                'bounds': [
+                    [lat, lon],  # SW
+                    [lat + lat_offset, lon],  # NW
+                    [lat + lat_offset, lon + lon_offset],  # NE
+                    [lat, lon + lon_offset],  # SE
+                    [lat, lon]  # SW again to close polygon
+                ],
+                'center': [lat + lat_offset/2, lon + lon_offset/2],
+                'stops': []
+            }
+            grid_cells.append(cell)
+    return grid_cells
+
+def assign_stops_to_cells(grid_cells, stops):
+    """Assign stops to their corresponding grid cells"""
+    for stop in stops:
+        lat, lon = stop['coordinates']
+        for cell in grid_cells:
+            bounds = cell['bounds']
+            if (bounds[0][0] <= lat <= bounds[1][0] and
+                bounds[0][1] <= lon <= bounds[2][1]):
+                cell['stops'].append(stop)
+                break
+    return grid_cells
+
+def calculate_density_score(cell, grid_cells, grid_size_meters):
+    """Calculate density score for a cell based on NxN grid area"""
+    score = 0
+    cell_center = cell['center']
+    grid_radius = 3  # Change this to adjust grid area (3 means 7x7 grid)
+    weights = {0: 1.0, 1: 0.7, 2: 0.5, 3: 0.25}  # Customize weights for different distances
+    total_squares = (2 * grid_radius + 1) ** 2  # Calculate total squares in the grid
+    
+    for other_cell in grid_cells:
+        # Calculate Manhattan distance in grid units
+        lat_diff = abs(cell_center[0] - other_cell['center'][0]) / (grid_size_meters/111320)
+        lon_diff = abs(cell_center[1] - other_cell['center'][1]) / (grid_size_meters/(111320 * np.cos(np.radians(52.52))))
+        grid_distance = max(int(lat_diff), int(lon_diff))
+        
+        if grid_distance <= grid_radius:  # Within NxN grid
+            stop_count = len(other_cell['stops'])
+            weight = weights.get(grid_distance, 0.0)  # Get weight or 0 if distance too far
+            score += stop_count * weight
+    
+    return score / total_squares  # Normalize by total squares in the grid
+
+def get_color(density, max_density):
+    """Get color based on density value"""
+    if density == 0:
+        return '#FFFFFF'
+    
+    colors = [
+        (0.0, '#FFFFFF'),    # White (no density)
+        (0.1, '#FFF7BC'),    # Very light yellow
+        (0.2, '#FED976'),    # Light yellow
+        (0.3, '#FEB24C'),    # Yellow orange
+        (0.4, '#FD8D3C'),    # Light orange
+        (0.5, '#FC4E2A'),    # Orange
+        (0.7, '#E31A1C'),    # Red
+        (0.8, '#BD0026'),    # Dark red
+        (1.0, '#800026')     # Very dark red
+    ]
+    
+    normalized = density / max_density
+    
+    # Find appropriate color interval
+    for i in range(len(colors)-1):
+        if colors[i][0] <= normalized <= colors[i+1][0]:
+            ratio = (normalized - colors[i][0]) / (colors[i+1][0] - colors[i][0])
+            color1 = [int(colors[i][1][j:j+2], 16) for j in (1,3,5)]
+            color2 = [int(colors[i+1][1][j:j+2], 16) for j in (1,3,5)]
+            rgb = [int(c1 + (c2-c1)*ratio) for c1, c2 in zip(color1, color2)]
+            return f'#{rgb[0]:02x}{rgb[1]:02x}{rgb[2]:02x}'
+    
+    return colors[-1][1]
+
+def create_heatmap(stops, grid_size_meters=100):
+    """Create density heatmap"""
+    bounds = {
+        'north': 52.60,  # Changed from 52.54
+        'south': 52.40,  # Changed from 52.50
+        'east': 13.65,   # Changed from 13.45
+        'west': 13.15    # Changed from 13.35
+    }
+    
+    # Create and populate grid
+    grid_cells = create_grid(bounds, grid_size_meters)
+    grid_cells = assign_stops_to_cells(grid_cells, stops)
+    
+    # Calculate density scores
+    for cell in grid_cells:
+        cell['density'] = calculate_density_score(cell, grid_cells, grid_size_meters)
+    
+    # Create map
+    berlin_map = folium.Map(
+        location=[52.52, 13.40],
+        zoom_start=11,
+        tiles='openstreetmap',
+    )
+    
+    # Add cells to map
+    max_density = max(cell['density'] for cell in grid_cells)
+    for cell in grid_cells:
+        color = get_color(cell['density'], max_density)
+        folium.Polygon(
+            locations=cell['bounds'],
+            color='black',
+            weight=1,
+            fill=True,
+            fill_color=color,
+            fill_opacity=0.7,
+            popup=f"Stops: {len(cell['stops'])}<br>Density: {cell['density']:.2f}"
+        ).add_to(berlin_map)
+    
+    # Add legend
+    legend_html = '''
+    <div style="position: fixed; bottom: 50px; right: 50px; width: 180px;
+         background-color: white; border-radius: 10px; z-index: 9999; padding: 10px">
+        <h4>Transport Density</h4>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #800026; margin-right: 5px;"></div>
+            <span>Extremely High</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #BD0026; margin-right: 5px;"></div>
+            <span>Very High</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #E31A1C; margin-right: 5px;"></div>
+            <span>High</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FC4E2A; margin-right: 5px;"></div>
+            <span>Medium High</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FD8D3C; margin-right: 5px;"></div>
+            <span>Medium</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FEB24C; margin-right: 5px;"></div>
+            <span>Medium Low</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FED976; margin-right: 5px;"></div>
+            <span>Low</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FFF7BC; margin-right: 5px;"></div>
+            <span>Very Low</span>
+        </div>
+        <div style="display: flex; align-items: center;">
+            <div style="width: 20px; height: 20px; background-color: #FFFFFF; margin-right: 5px;"></div>
+            <span>None</span>
+        </div>
+    </div>
+    '''
+    berlin_map.get_root().html.add_child(folium.Element(legend_html))
+    
+    return berlin_map, grid_cells
+
+if __name__ == "__main__":
+    # Load stops
+    stops = []
+    current_stop = {}
+    
+    with open("transport_stops.txt", 'r', encoding='utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if line.startswith("Stop"):
+                if current_stop:
+                    stops.append(current_stop.copy())
+                current_stop = {"name": line.split(": ")[1]}
+            elif line.startswith("Location:"):
+                coords = line.split(": ")[1].strip("()").split(",")
+                current_stop["coordinates"] = (float(coords[0]), float(coords[1]))
+    
+    # Create multiple maps with different grid sizes
+    grid_sizes = [200]  # in meters
+    
+    for size in grid_sizes:
+        density_map, grid_cells = create_heatmap(stops, grid_size_meters=size)
+        density_map.save(f"transport_density_grid_{size}m.html")
+        
+        # Export density data
+        export_density_data(grid_cells, f'density_data_{size}m.csv')
+        print(f"Created map and exported data with {size}x{size}m grid cells")
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This code creates a heatmap of transport density in Berlin using public transport stops data. It generates an interactive map using Folium and exports the density data to a CSV file.</p>
+
+                <h3>Summary</h3>
+                <p>This Python script creates a heatmap of transport density in Berlin using public transport stops data. It generates an interactive map using Folium and exports the density data to a CSV file. Key steps include:</p>
+                <ul>
+                    <li>Creating a grid of cells to represent the area of interest.</li>
+                    <li>Assigning transport stops to their corresponding grid cells.</li>
+                    <li>Calculating density scores for each cell based on the number of stops and their proximity.</li>
+                    <li>Generating an interactive map with color-coded cells representing different density levels.</li>
+                    <li>Exporting the density data to a CSV file.</li>
+                </ul>
+                <p><strong>Results:</strong> An interactive heatmap of transport density in Berlin and a CSV file containing density data.</p>
+            </article>
+        </div>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <section class="split contact">
+                <section class="alt">
+                    <h3>Address</h3>
+                    <p>Brunnenstraße<br />
+                    Berlin, Germany</p>
+                </section>
+                <section>
+                    <h3>Phone</h3>
+                    <p><a href="#">+49 15754762450</a></p>
+                </section>
+                <section>
+                    <h3>Email</h3>
+                    <p><a href="#">daurenyedres@gmail.com</a></p>
+                </section>
+                <section>
+                    <h3>Social</h3>
+                    <ul class="icons alt">
+                        <li><a href="https://www.linkedin.com/in/dauren-yedres-34a59a209/" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                        <li><a href="https://github.com/DaurenYedres" class="icon brands fa-github"><span class="label">GitHub</span></a></li>
+                    </ul>
+                </section>
+            </section>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.scrollex.min.js"></script>
+    <script src="assets/js/jquery.scrolly.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+
+</body>
+</html>

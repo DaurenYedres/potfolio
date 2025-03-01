@@ -1,0 +1,196 @@
+<!DOCTYPE HTML>
+<html>
+<head>
+    <title>Project - Berlin Public Transport Stops</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no" />
+    <link rel="stylesheet" href="assets/css/main.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/themes/prism-tomorrow.min.css" />
+    <noscript><link rel="stylesheet" href="assets/css/noscript.css" /></noscript>
+    <style>
+        .code-container {
+            background-color: #2d2d2d;
+            color: #f8f8f2;
+            padding: 20px;
+            border-radius: 5px;
+            margin: 20px auto;
+            max-width: 800px;
+            text-align: left;
+        }
+        pre code {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .map-container {
+            width: 100%;
+            height: 500px;
+            margin: 20px auto;
+        }
+    </style>
+</head>
+<body class="is-preload">
+
+    <!-- Wrapper -->
+    <div id="wrapper" class="fade-in">
+
+        <!-- Header -->
+        <header id="header">
+            <a href="index.html" class="logo">Portfolio</a>
+        </header>
+
+        <!-- Main -->
+        <div id="main">
+            <!-- Project Description -->
+            <article class="post featured">
+                <header class="major">
+                    <h2>Project: Berlin Public Transport Stops</h2>
+                    <p>Aim: To fetch and visualize public transport stops in Berlin, Germany, using the Overpass API and Folium for mapping.</p>
+                </header>
+                <div class="map-container">
+                    <!-- Embed the interactive map here -->
+                    <iframe src="files from diff projescts/berlin_transport_stops.html" width="100%" height="100%" frameborder="0"></iframe>
+                </div>
+                <p>Tasks Done: Developed a Python script to fetch public transport stops (train, subway, tram, bus) in Berlin using the Overpass API. The script visualizes the stops on an interactive map using Folium and saves the stop information to a text file.</p>
+                <p>Tools Used: Python, Requests, Folium, Overpass API.</p>
+                <p>Output: An interactive map of Berlin's public transport stops and a text file containing detailed stop information.</p>
+
+                <!-- Installing Required Packages -->
+                <h3>Installing Required Packages</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+pip install requests folium
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> The above commands install the necessary Python packages for making HTTP requests and creating interactive maps.</p>
+
+                <h3>Fetching Transport Stops</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import requests
+
+# Define the Overpass API endpoint
+overpass_url = "http://overpass-api.de/api/interpreter"
+
+def get_transport_stops(transport_type):
+    """Make API request for a specific transport type"""
+    overpass_query = f"""
+    [out:json];
+    area["name"="Berlin"]->.berlin;
+    (
+      node["public_transport"="stop_position"]["{transport_type}"="yes"](area.berlin);
+      node["public_transport"="platform"]["{transport_type}"="yes"](area.berlin);
+    );
+    out body;
+    """
+    
+    response = requests.get(overpass_url, params={'data': overpass_query})
+    response.raise_for_status()
+    return response.json()
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This function sends a request to the Overpass API to fetch transport stops of a specific type (e.g., train, subway, tram, bus) in Berlin.</p>
+
+                <h3>Visualizing Transport Stops</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+import folium
+from folium.plugins import MarkerCluster
+
+# Create an optimized map
+berlin_map = folium.Map(
+    location=[52.5200, 13.4050],
+    zoom_start=12,
+    prefer_canvas=True  # Uses canvas renderer for better performance
+)
+
+# Create marker clusters for each transport type
+clusters = {
+    "train": MarkerCluster(name="Train Stations"),
+    "subway": MarkerCluster(name="Subway Stations"),
+    "tram": MarkerCluster(name="Tram Stops"),
+    "bus": MarkerCluster(name="Bus Stops")
+}
+
+# Add clusters to map
+for cluster in clusters.values():
+    cluster.add_to(berlin_map)
+
+# Add map features
+folium.TileLayer('cartodbpositron').add_to(berlin_map)
+folium.LayerControl().add_to(berlin_map)
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This code creates an interactive map of Berlin with marker clusters for different transport types (train, subway, tram, bus). It uses Folium for map visualization.</p>
+
+                <h3>Saving Transport Stops Information</h3>
+                <div class="code-container">
+                    <pre><code class="language-python">
+# Clear existing files before writing new data
+if len(all_stops) > 0:  # Only clear if we have new data
+    with open("transport_stops.txt", "w", encoding='utf-8') as f:
+        f.write("Public Transport Stops in Berlin\n")
+        f.write("================================\n")
+        for i, stop in enumerate(all_stops, 1):
+            f.write(f"Stop {i}: {stop['name']}\n")
+            f.write(f"Type: {stop['type']}\n")
+            f.write(f"Public_transport_name: {stop['route_ref']}\n")
+            f.write(f"Location: {stop['coordinates']}\n")
+            f.write("--------------------------------\n")
+
+    # Save and display the map
+    berlin_map.save("berlin_transport_stops.html")
+    print(f"Successfully saved {len(all_stops)} stops to files")
+                    </code></pre>
+                </div>
+                <p><strong>Explanation:</strong> This code saves the fetched transport stops information to a text file and the interactive map to an HTML file.</p>
+
+                <h3>Summary</h3>
+                <p>This Python script fetches public transport stops in Berlin using the Overpass API and visualizes them on an interactive map using Folium. It also saves the stop information to a text file. Key steps include:</p>
+                <ul>
+                    <li>Fetching transport stops data from the Overpass API.</li>
+                    <li>Creating an interactive map with marker clusters for different transport types.</li>
+                    <li>Saving the transport stops information to a text file and the map to an HTML file.</li>
+                </ul>
+                <p><strong>Results:</strong> An interactive map of Berlin's public transport stops and a text file containing detailed stop information.</p>
+            </article>
+        </div>
+
+        <!-- Footer -->
+        <footer id="footer">
+            <section class="split contact">
+                <section class="alt">
+                    <h3>Address</h3>
+                    <p>Brunnenstraße<br />
+                    Berlin, Germany</p>
+                </section>
+                <section>
+                    <h3>Phone</h3>
+                    <p><a href="#">+49 15754762450</a></p>
+                </section>
+                <section>
+                    <h3>Email</h3>
+                    <p><a href="#">daurenyedres@gmail.com</a></p>
+                </section>
+                <section>
+                    <h3>Social</h3>
+                    <ul class="icons alt">
+                        <li><a href="https://www.linkedin.com/in/dauren-yedres-34a59a209/" class="icon brands fa-linkedin"><span class="label">LinkedIn</span></a></li>
+                        <li><a href="https://github.com/DaurenYedres" class="icon brands fa-github"><span class="label">GitHub</span></a></li>
+                    </ul>
+                </section>
+            </section>
+        </footer>
+    </div>
+
+    <!-- Scripts -->
+    <script src="assets/js/jquery.min.js"></script>
+    <script src="assets/js/jquery.scrollex.min.js"></script>
+    <script src="assets/js/jquery.scrolly.min.js"></script>
+    <script src="assets/js/browser.min.js"></script>
+    <script src="assets/js/breakpoints.min.js"></script>
+    <script src="assets/js/util.js"></script>
+    <script src="assets/js/main.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/prism/1.25.0/prism.min.js"></script>
+
+</body>
+</html>
